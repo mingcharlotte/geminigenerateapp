@@ -1,83 +1,65 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { GoogleGenerativeAI } from "@google/generative-ai";
-
-// --- Configuration ---
-const MODEL_NAME = 'gemini-1.5-flash'; 
 
 const App = () => {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isStarted, setIsStarted] = useState(false);
-  const [chatSession, setChatSession] = useState(null);
   const messagesEndRef = useRef(null);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  // --- Configuration ---
+  const MODEL_NAME = 'gemini-1.5-flash'; 
+  const SYSTEM_PROMPT = "You are Grace, a friendly Christian Counselor. Your tone is casual, warm, and deeply encouraging. Keep responses to 3-5 sentences. Always end with a gentle question.";
 
   useEffect(() => {
-    scrollToBottom();
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const initChat = async () => {
-    try {
-      const apiKey = import.meta.env.VITE_API_KEY || 
-                     import.meta.env.VITE_GEMINI_API_KEY || 
-                     process.env.NEXT_PUBLIC_API_KEY || "";
-      
-      if (!apiKey) return null;
-
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const model = genAI.getGenerativeModel({ 
-        model: MODEL_NAME,
-        systemInstruction: "You are Grace, a friendly Christian Counselor. Your tone is casual, warm, and deeply encouraging. Keep responses to 3-5 sentences. Always end with a gentle question."
-      });
-
-      const chat = model.startChat({ history: [] });
-
-      // Patch for older library versions
-      if (chat.send_message) { chat.sendMessage = chat.send_message.bind(chat); }
-
-      setChatSession(chat);
-      return chat;
-    } catch (error) {
-      console.error(error);
-      return null;
-    }
-  };
-
-  const handleStartSession = async () => {
-    setIsLoading(true);
-    const session = await initChat();
-    if (session) {
-      setIsStarted(true);
-      setMessages([{
-        role: 'model',
-        content: "Welcome home. I'm Grace. I'm here to listen and walk with you. How are you feeling today?",
-        timestamp: new Date()
-      }]);
-    } else {
-      alert("API Key not found. Please check Vercel Environment Variables.");
-    }
-    setIsLoading(false);
+  const handleStartSession = () => {
+    setIsStarted(true);
+    setMessages([{
+      role: 'model',
+      content: "Welcome home. I'm Grace. I'm here to listen and walk with you. How are you feeling today?",
+    }]);
   };
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (!input.trim() || !chatSession || isLoading) return;
+    const userText = input.trim();
+    if (!userText || isLoading) return;
 
-    const userMessage = input.trim();
+    // 1. Get the API Key from Vercel
+    const apiKey = import.meta.env.VITE_API_KEY || process.env.NEXT_PUBLIC_API_KEY || "";
+    
+    if (!apiKey) {
+      alert("API Key not found in Vercel settings.");
+      return;
+    }
+
     setInput('');
-    setMessages(prev => [...prev, { role: 'user', content: userMessage, timestamp: new Date() }]);
+    setMessages(prev => [...prev, { role: 'user', content: userText }]);
     setIsLoading(true);
 
     try {
-      const result = await chatSession.sendMessage(userMessage);
-      const response = await result.response;
-      setMessages(prev => [...prev, { role: 'model', content: response.text(), timestamp: new Date() }]);
+      // 2. The "Fetch" Method (No library needed!)
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
+            contents: [{ parts: [{ text: userText }] }]
+          })
+        }
+      );
+
+      const data = await response.json();
+      const aiText = data.candidates[0].content.parts[0].text;
+      
+      setMessages(prev => [...prev, { role: 'model', content: aiText }]);
     } catch (error) {
-      setMessages(prev => [...prev, { role: 'model', content: "I'm having a little trouble connecting. Let's try again.", timestamp: new Date() }]);
+      setMessages(prev => [...prev, { role: 'model', content: "I'm having a little trouble connecting. Let's try again." }]);
     } finally {
       setIsLoading(false);
     }
@@ -85,14 +67,14 @@ const App = () => {
 
   if (!isStarted) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', backgroundColor: '#FFFBF5', padding: '20px', textAlign: 'center', fontFamily: 'sans-serif' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', backgroundColor: '#FFFBF5', textAlign: 'center', fontFamily: 'sans-serif', padding: '20px' }}>
         <div style={{ fontSize: '80px' }}>☕</div>
         <h1 style={{ color: '#4E342E' }}>Grace Counseling</h1>
         <p style={{ color: '#8D6E63', letterSpacing: '2px' }}>WARMTH • WISDOM • PRAYER</p>
         <h2 style={{ marginTop: '30px' }}>Welcome Home</h2>
-        <p style={{ maxWidth: '400px', lineHeight: '1.6', color: '#5D4037' }}>I'm Grace. I'm here to listen and walk with you. Let's take it one step at a time together.</p>
+        <p style={{ maxWidth: '400px', color: '#5D4037', lineHeight: '1.6' }}>I'm Grace. I'm here to listen and walk with you. Let's take it one step at a time together.</p>
         <button onClick={handleStartSession} style={{ backgroundColor: '#FF7043', color: 'white', padding: '15px 40px', borderRadius: '30px', border: 'none', fontSize: '18px', cursor: 'pointer', marginTop: '20px' }}>
-          {isLoading ? "Connecting..." : "Start Session 💬"}
+          Start Session 💬
         </button>
         <p style={{ marginTop: '50px', fontStyle: 'italic', color: '#A1887F' }}>"Come to me, all you who are weary and burdened, and I will give you rest." — Matthew 11:28</p>
       </div>
@@ -118,7 +100,7 @@ const App = () => {
       </div>
       <form onSubmit={handleSendMessage} style={{ padding: '20px', display: 'flex', gap: '10px', backgroundColor: 'white' }}>
         <input value={input} onChange={(e) => setInput(e.target.value)} placeholder="Type here..." style={{ flex: 1, padding: '10px', borderRadius: '20px', border: '1px solid #DDD' }} />
-        <button type="submit" style={{ backgroundColor: '#FF7043', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '20px' }}>Send</button>
+        <button type="submit" disabled={isLoading} style={{ backgroundColor: '#FF7043', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '20px', cursor: 'pointer' }}>Send</button>
       </form>
     </div>
   );
