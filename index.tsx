@@ -17,7 +17,7 @@ import {
 
 // --- Constants & Types ---
 
-const MODEL_NAME = 'gemini-3-pro-preview';
+const MODEL_NAME = 'gemini-1.5-flash';
 
 interface Message {
   role: 'user' | 'model';
