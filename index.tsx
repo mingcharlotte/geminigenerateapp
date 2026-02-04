@@ -45,7 +45,8 @@ const App: React.FC = () => {
   }, [messages, isLoading]);
 
   const initChat = () => {
-   const ai = new GoogleGenAI({ apiKey: process.env.NEXT_PUBLIC_API_KEY || process.env.API_KEY });
+   const apiKey = import.meta.env.VITE_API_KEY || process.env.NEXT_PUBLIC_API_KEY || process.env.API_KEY || "";
+const ai = new GoogleGenAI({ apiKey });
     const chat = ai.chats.create({
       model: MODEL_NAME,
       config: {
