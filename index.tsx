@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 
 // --- CONFIGURATION ---
 // We use 2.0-flash because your system recognized it earlier.
-const MODEL_NAME = 'gemini-2.0-flash'; 
+const MODEL_NAME = 'gemini-1.5-flash-latest'; 
 
 const App = () => {
   const [messages, setMessages] = useState([]);
