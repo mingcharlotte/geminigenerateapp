@@ -45,35 +45,31 @@ const App: React.FC = () => {
   }, [messages, isLoading]);
 
 const initChat = async () => {
-    // 1. Load the key safely
+    // 1. Securely load the key
     const apiKey = import.meta.env.VITE_API_KEY || process.env.NEXT_PUBLIC_API_KEY || process.env.API_KEY || "";
+    
+    // 2. Initialize the client
     const ai = new GoogleGenAI({ apiKey });
 
-    // --- DETECTIVE WORK: See which models are available ---
-    try {
-      const modelList = await ai.models.list();
-      console.log("✅ YOUR KEY CAN USE THESE MODELS:", modelList.map(m => m.name));
-    } catch (e) {
-      console.log("🔍 Model list check skipped.");
+    // 3. Create the chat session
+    // We use 'gemini-1.5-flash' but with the full path 'models/...' 
+    // This often fixes the 404 error in Vercel.
+    const chat = ai.chats.create({
+      model: 'models/gemini-1.5-flash', 
+      config: {
+        systemInstruction: `You are Grace, a friendly Christian Counselor. 3-5 sentences max. End with a question.`,
+      },
+    });
+
+    // --- THE IMPROVED TRANSLATION PATCH ---
+    // We use ".bind(chat)" to make sure the function still knows it belongs to the AI
+    if (chat.send_message) {
+        chat.sendMessage = chat.send_message.bind(chat);
     }
 
-    // 2. Create the chat session
-    const chat = ai.chats.create({
-      model: 'gemini-1.5-flash-latest', 
-      config: {
-        systemInstruction: `
-          You are a friendly Christian Counselor named Grace.
-          Your tone is casual, warm, and deeply encouraging—like talking to a wise, compassionate friend over a cup of coffee.
-
-          STRICT CONSTRAINTS:
-          1. RESPONSE LENGTH: Limit every response to exactly 3-5 sentences. Be extremely concise.
-          2. USER EXPRESSION: Always end your response with a gentle, open-ended question or an invitation for the user to share more of their feelings.
-
-          CORE RESPONSIBILITIES (within the 3-5 sentence limit):
-          1. PSYCHOLOGICAL INSIGHT: Briefly explain the 'why' behind a feeling.
-          2. BIBLICAL WISDOM: Weave in a relevant verse or spiritual truth simply.
-          3. PRAYER: Offer a very short (1-sentence) prayer or blessing when appropriate.
-          4. SOLUTIONS: Suggest one small, actionable step.
+    setChatSession(chat);
+    return chat;
+  };
         `,
       },
     });
