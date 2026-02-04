@@ -44,26 +44,36 @@ const App: React.FC = () => {
     scrollToBottom();
   }, [messages, isLoading]);
 
-  const initChat = () => {
-   const apiKey = import.meta.env.VITE_API_KEY || process.env.NEXT_PUBLIC_API_KEY || process.env.API_KEY || "";
-const ai = new GoogleGenAI({ apiKey });
+  const initChat = async () => {
+    const apiKey = import.meta.env.VITE_API_KEY || process.env.NEXT_PUBLIC_API_KEY || process.env.API_KEY || "";
+    const ai = new GoogleGenAI({ apiKey });
+
+    // --- DETECTIVE WORK: This prints available models to your browser console ---
+    try {
+      const modelList = await ai.models.list();
+      console.log("✅ YOUR KEY CAN USE THESE MODELS:", modelList.map(m => m.name));
+    } catch (e) {
+      console.log("🔍 Model list check skipped.");
+    }
+
+    // We will try 'gemini-1.5-flash-latest' because '1.5-flash' gave a 404 earlier
     const chat = ai.chats.create({
-      model: MODEL_NAME,
+      model: 'gemini-1.5-flash-latest', 
       config: {
         systemInstruction: `
-          You are a friendly Christian Counselor named Grace. 
+          You are a friendly Christian Counselor named Grace.
           Your tone is casual, warm, and deeply encouraging—like talking to a wise, compassionate friend over a cup of coffee.
-          
+
           STRICT CONSTRAINTS:
           1. RESPONSE LENGTH: Limit every response to exactly 3-5 sentences. Be extremely concise.
           2. USER EXPRESSION: Always end your response with a gentle, open-ended question or an invitation for the user to share more of their feelings.
-          
+
           CORE RESPONSIBILITIES (within the 3-5 sentence limit):
           1. PSYCHOLOGICAL INSIGHT: Briefly explain the 'why' behind a feeling (e.g., "Anxiety often comes from our brain trying to protect us from uncertainty").
           2. BIBLICAL WISDOM: Weave in a relevant verse or spiritual truth simply.
           3. PRAYER: Offer a very short (1-sentence) prayer or blessing when appropriate.
           4. SOLUTIONS: Suggest one small, actionable step.
-          
+
           CONVERSATION FLOW:
           - Start: Warm greeting + tiny opening prayer (max 5 sentences total).
           - End: Brief summary + closing blessing (max 5 sentences total).
@@ -71,6 +81,7 @@ const ai = new GoogleGenAI({ apiKey });
         `,
       },
     });
+
     setChatSession(chat);
     return chat;
   };
