@@ -28,6 +28,9 @@ const App = () => {
   const handleSendMessage = async (e) => {
     e.preventDefault();
     const userText = input.trim();
+const handleSendMessage = async (e) => {
+    e.preventDefault();
+    const userText = input.trim();
     if (!userText || isLoading) return;
 
     const apiKey = import.meta.env.VITE_API_KEY || 
@@ -35,7 +38,7 @@ const App = () => {
                    process.env.NEXT_PUBLIC_API_KEY || "";
     
     if (!apiKey) {
-      alert("API Key not found. Please set VITE_API_KEY in Vercel.");
+      alert("API Key not found.");
       return;
     }
 
@@ -50,26 +53,33 @@ const App = () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
-            contents: [{ parts: [{ text: userText }] }]
+            contents: [{ 
+              role: "user", 
+              parts: [{ text: userText }] 
+            }],
+            generationConfig: {
+              maxOutputTokens: 500,
+            }
           })
         }
       );
 
       const data = await response.json();
-      if (data.error) throw new Error(data.error.message);
+      
+      if (data.error) {
+         console.error("Google API Error:", data.error.message);
+         throw new Error(data.error.message);
+      }
       
       const aiText = data.candidates[0].content.parts[0].text;
       setMessages(prev => [...prev, { role: 'model', content: aiText }]);
     } catch (error) {
-      setMessages(prev => [...prev, { role: 'model', content: "I'm having a little trouble connecting. Let's try again." }]);
+      console.error("Detailed Error:", error);
+      setMessages(prev => [...prev, { role: 'model', content: "I'm having a little trouble connecting. Please try again in a moment." }]);
     } finally {
       setIsLoading(false);
     }
   };
-
-  // --- UI: WELCOME ---
-  if (!isStarted) {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', backgroundColor: '#FFFBF5', textAlign: 'center', fontFamily: 'sans-serif', padding: '20px' }}>
         <div style={{ fontSize: '80px' }}>☕</div>
