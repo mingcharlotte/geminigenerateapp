@@ -1,40 +1,18 @@
-
 import React, { useState, useEffect, useRef } from 'react';
-import { createRoot } from 'react-dom/client';
-import { GoogleGenAI, Chat, GenerateContentResponse } from "@google/genai";
-import { 
-  Heart, 
-  Send, 
-  Moon, 
-  Sun, 
-  MessageCircle, 
-  BookOpen, 
-  Coffee,
-  RefreshCw,
-  LogOut,
-  Sparkles
-} from 'lucide-react';
+import { GoogleGenAI } from "@google/generative-ai";
+import { Heart, Send, MessageCircle, BookOpen, Coffee, RefreshCw, LogOut } from 'lucide-react';
 
-// --- Constants & Types ---
+// --- Configuration ---
+// We use gemini-2.0-flash as it is the most modern version found in your environment
+const MODEL_NAME = 'models/gemini-2.0-flash';
 
-const MODEL_NAME = 'gemini-3-flash';
-
-interface Message {
-  role: 'user' | 'model';
-  content: string;
-  timestamp: Date;
-}
-
-// --- App Component ---
-
-const App: React.FC = () => {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [inputText, setInputText] = useState('');
+const App = () => {
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isSessionStarted, setIsSessionStarted] = useState(false);
-  const [chatSession, setChatSession] = useState<Chat | null>(null);
-  
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const [isStarted, setIsStarted] = useState(false);
+  const [chatSession, setChatSession] = useState(null);
+  const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -42,268 +20,148 @@ const App: React.FC = () => {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages, isLoading]);
+  }, [messages]);
 
-const initChat = async () => {
-    // 1. Securely load the key
-    const apiKey = import.meta.env.VITE_API_KEY || process.env.NEXT_PUBLIC_API_KEY || process.env.API_KEY || "";
-    
-    // 2. Initialize the client
-    const ai = new GoogleGenAI({ apiKey });
+  // --- THE CORE AI SETUP ---
+  const initChat = async () => {
+    try {
+      // 1. Securely load the API Key
+      const apiKey = import.meta.env.VITE_API_KEY || 
+                     import.meta.env.VITE_GEMINI_API_KEY || 
+                     process.env.NEXT_PUBLIC_API_KEY || "";
+      
+      if (!apiKey) {
+        console.error("API Key is missing. Please set VITE_API_KEY in Vercel.");
+        return null;
+      }
 
-    // 3. Create the chat session
-    // We use 'gemini-1.5-flash' but with the full path 'models/...' 
-    // This often fixes the 404 error in Vercel.
-    const chat = ai.chats.create({
-      model: 'models/gemini-1.5-flash', 
-      config: {
-        systemInstruction: `You are Grace, a friendly Christian Counselor. 3-5 sentences max. End with a question.`,
-      },
-    });
+      const ai = new GoogleGenAI(apiKey);
+      const model = ai.getGenerativeModel({ 
+        model: MODEL_NAME,
+        systemInstruction: "You are Grace, a friendly Christian Counselor. Your tone is casual, warm, and deeply encouraging—like talking over a cup of coffee. Keep responses to 3-5 sentences. Always end with a gentle question."
+      });
 
-    // --- THE IMPROVED TRANSLATION PATCH ---
-    // We use ".bind(chat)" to make sure the function still knows it belongs to the AI
-    if (chat.send_message) {
+      const chat = model.startChat({
+        history: [],
+        generationConfig: { maxOutputTokens: 200 }
+      });
+
+      // --- THE TRANSLATION PATCH ---
+      // This fixes the 'sendMessage is not a function' error
+      if (chat.send_message) {
         chat.sendMessage = chat.send_message.bind(chat);
+      }
+
+      setChatSession(chat);
+      return chat;
+    } catch (error) {
+      console.error("Failed to initialize chat:", error);
+      return null;
     }
-
-    setChatSession(chat);
-    return chat;
-  };
-        `,
-      },
-    });
-
-    // --- THE TRANSLATION PATCH ---
-    // This fixes the "sendMessage is not a function" error
-    chat.sendMessage = chat.send_message;
-
-    setChatSession(chat);
-    return chat;
-  };
-          CONVERSATION FLOW:
-          - Start: Warm greeting + tiny opening prayer (max 5 sentences total).
-          - End: Brief summary + closing blessing (max 5 sentences total).
-          - Use casual, empathetic language.
-        `,
-      },
-    });
-
-    setChatSession(chat);
-    return chat;
   };
 
   const handleStartSession = async () => {
     setIsLoading(true);
-    const chat = initChat();
-    try {
-      const response = await chat.sendMessage({ 
-        message: "I'm ready to start our counseling session. Please greet me and lead a short opening prayer." 
-      });
-      
+    const session = await initChat();
+    if (session) {
+      setIsStarted(true);
+      // Initial greeting
       setMessages([{
         role: 'model',
-        content: response.text || "Hello! I'm so glad you're here. Let's start with a quick prayer together.",
+        content: "Welcome home. I'm Grace. I'm here to listen and walk with you. How are you feeling today?",
         timestamp: new Date()
       }]);
-      setIsSessionStarted(true);
-    } catch (error) {
-      console.error("Error starting session:", error);
-    } finally {
-      setIsLoading(false);
+    } else {
+      alert("Could not start session. Please check your API Key in Vercel settings.");
     }
+    setIsLoading(false);
   };
 
-  const handleEndSession = async () => {
-    if (!chatSession) return;
-    setIsLoading(true);
-    try {
-      const response = await chatSession.sendMessage({ 
-        message: "I think I'm ready to wrap up for today. Can we have a closing prayer and a summary?" 
-      });
-      
-      setMessages(prev => [...prev, {
-        role: 'model',
-        content: response.text || "It's been wonderful talking. May God bless you.",
-        timestamp: new Date()
-      }]);
-    } catch (error) {
-      console.error("Error ending session:", error);
-    } finally {
-      setIsLoading(false);
-    }
-  };
+  const handleSendMessage = async (e) => {
+    e.preventDefault();
+    if (!input.trim() || !chatSession || isLoading) return;
 
-  const handleSendMessage = async (e?: React.FormEvent) => {
-    e?.preventDefault();
-    if (!inputText.trim() || !chatSession || isLoading) return;
-
-    const userMessage = inputText.trim();
-    setInputText('');
+    const userMessage = input.trim();
+    setInput('');
     setMessages(prev => [...prev, { role: 'user', content: userMessage, timestamp: new Date() }]);
     setIsLoading(true);
 
     try {
-      const result = await chatSession.sendMessage({ message: userMessage });
-      setMessages(prev => [...prev, { 
-        role: 'model', 
-        content: result.text || "I'm listening, but I'm having a little trouble responding. Could you say that again?",
-        timestamp: new Date() 
-      }]);
+      // The patch above ensures sendMessage works here
+      const result = await chatSession.sendMessage(userMessage);
+      const response = await result.response;
+      setMessages(prev => [...prev, { role: 'model', content: response.text(), timestamp: new Date() }]);
     } catch (error) {
-      console.error("Chat Error:", error);
-      setMessages(prev => [...prev, { 
-        role: 'model', 
-        content: "I'm so sorry, I hit a little snag in our connection. Could we try that again? I'm still here for you.",
-        timestamp: new Date() 
-      }]);
+      console.error("Error sending message:", error);
+      setMessages(prev => [...prev, { role: 'model', content: "I'm sorry, I'm having a little trouble connecting. Let's try again in a moment.", timestamp: new Date() }]);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const resetApp = () => {
-    setMessages([]);
-    setIsSessionStarted(false);
-    setChatSession(null);
-  };
-
-  return (
-    <div className="min-h-screen bg-[#fdfaf6] text-slate-800 font-sans flex flex-col items-center">
-      {/* Header */}
-      <header className="w-full max-w-2xl px-6 py-8 flex items-center justify-between border-b border-orange-100 bg-white shadow-sm rounded-b-3xl">
-        <div className="flex items-center gap-3">
-          <div className="bg-orange-100 p-2 rounded-full text-orange-600">
-            <Heart size={28} />
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-slate-900 leading-tight">Grace Counseling</h1>
-            <p className="text-xs text-slate-500 uppercase tracking-widest font-semibold">Warmth • Wisdom • Prayer</p>
-          </div>
-        </div>
-        {isSessionStarted && (
+  // --- UI: WELCOME SCREEN ---
+  if (!isStarted) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', backgroundColor: '#FFFBF5', padding: '20px', fontFamily: 'sans-serif' }}>
+        <div style={{ textAlign: 'center', maxWidth: '500px' }}>
+          <div style={{ fontSize: '80px' }}>☕</div>
+          <h1 style={{ color: '#4E342E', marginBottom: '10px' }}>Grace Counseling</h1>
+          <p style={{ color: '#8D6E63', letterSpacing: '2px', marginBottom: '30px' }}>WARMTH • WISDOM • PRAYER</p>
+          <h2 style={{ fontSize: '28px', color: '#3E2723' }}>Welcome Home</h2>
+          <p style={{ color: '#5D4037', lineHeight: '1.6', marginBottom: '40px' }}>
+            I'm Grace. I'm here to listen and walk with you. Let's take it one step at a time together.
+          </p>
           <button 
-            onClick={resetApp}
-            className="text-slate-400 hover:text-orange-500 transition-colors p-2"
-            title="Reset Chat"
+            onClick={handleStartSession}
+            disabled={isLoading}
+            style={{ backgroundColor: '#FF7043', color: 'white', padding: '15px 40px', borderRadius: '30px', border: 'none', fontSize: '18px', cursor: 'pointer', boxShadow: '0 4px 15px rgba(255,112,67,0.3)' }}
           >
-            <RefreshCw size={20} />
+            {isLoading ? "Connecting..." : "Start Session 💬"}
           </button>
-        )}
+          <p style={{ marginTop: '50px', fontStyle: 'italic', color: '#A1887F', fontSize: '14px' }}>
+            "Come to me, all you who are weary and burdened, and I will give you rest." — Matthew 11:28
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // --- UI: CHAT SCREEN ---
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', backgroundColor: '#FFFBF5', fontFamily: 'sans-serif' }}>
+      <header style={{ padding: '15px 20px', borderBottom: '1px solid #EDE7F6', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+          <span style={{ fontSize: '24px' }}>🧡</span>
+          <span style={{ fontWeight: 'bold', color: '#4E342E' }}>Grace Counseling</span>
+        </div>
+        <button onClick={() => window.location.reload()} style={{ background: 'none', border: 'none', color: '#8D6E63', cursor: 'pointer' }}>End Session</button>
       </header>
 
-      {/* Main Content Area */}
-      <main className="flex-1 w-full max-w-2xl px-4 py-6 overflow-hidden flex flex-col">
-        {!isSessionStarted ? (
-          <div className="flex-1 flex flex-col items-center justify-center text-center px-8 space-y-8">
-            <div className="relative">
-              <div className="absolute -inset-4 bg-orange-200/30 blur-2xl rounded-full animate-pulse"></div>
-              <Coffee size={64} className="text-orange-400 relative z-10" />
-            </div>
-            <div className="space-y-4">
-              <h2 className="text-3xl font-bold text-slate-900">Welcome Home</h2>
-              <p className="text-slate-600 leading-relaxed max-w-md">
-                I'm Grace. I'm here to listen and walk with you. Let's take it one step at a time together.
-              </p>
-            </div>
-            <button 
-              onClick={handleStartSession}
-              disabled={isLoading}
-              className="px-8 py-4 bg-orange-500 hover:bg-orange-600 text-white rounded-2xl font-bold shadow-lg shadow-orange-200 transition-all flex items-center gap-2 group"
-            >
-              {isLoading ? (
-                <Sparkles className="animate-spin" />
-              ) : (
-                <>
-                  Start Session
-                  <MessageCircle size={20} className="group-hover:translate-x-1 transition-transform" />
-                </>
-              )}
-            </button>
-            <p className="text-xs text-slate-400 italic">"Come to me, all you who are weary and burdened, and I will give you rest." — Matthew 11:28</p>
-          </div>
-        ) : (
-          <div className="flex-1 flex flex-col bg-white/50 backdrop-blur-sm rounded-3xl overflow-hidden border border-white shadow-inner">
-            <div className="flex-1 overflow-y-auto p-4 space-y-6 scrollbar-hide">
-              {messages.map((msg, i) => (
-                <div 
-                  key={i} 
-                  className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
-                >
-                  <div className={`max-w-[85%] px-5 py-4 rounded-3xl text-sm leading-relaxed shadow-sm ${
-                    msg.role === 'user' 
-                    ? 'bg-slate-800 text-white rounded-tr-none' 
-                    : 'bg-white text-slate-800 border border-orange-50/50 rounded-tl-none'
-                  }`}>
-                    {msg.content.split('\n').map((line, idx) => (
-                      <p key={idx} className={idx > 0 ? 'mt-2' : ''}>
-                        {line}
-                      </p>
-                    ))}
-                  </div>
-                  <span className="text-[10px] text-slate-400 mt-1 px-2 uppercase tracking-tighter">
-                    {msg.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                </div>
-              ))}
-              {isLoading && (
-                <div className="flex items-center gap-2 text-slate-400 px-4 py-2 bg-white/50 w-fit rounded-full border border-orange-50">
-                  <div className="flex gap-1">
-                    <div className="w-1.5 h-1.5 bg-orange-400 rounded-full animate-bounce"></div>
-                    <div className="w-1.5 h-1.5 bg-orange-400 rounded-full animate-bounce [animation-delay:0.2s]"></div>
-                    <div className="w-1.5 h-1.5 bg-orange-400 rounded-full animate-bounce [animation-delay:0.4s]"></div>
-                  </div>
-                  <span className="text-xs font-medium tracking-wide">Listening...</span>
-                </div>
-              )}
-              <div ref={messagesEndRef} />
-            </div>
-
-            {/* Input Bar */}
-            <div className="p-4 bg-white border-t border-slate-100">
-              <div className="flex items-center gap-2 mb-2">
-                 <button 
-                  onClick={handleEndSession}
-                  className="text-[10px] font-bold text-slate-400 hover:text-orange-500 uppercase tracking-widest px-3 py-1 border border-slate-100 rounded-full transition-colors flex items-center gap-1"
-                >
-                  <LogOut size={12} />
-                  End Session
-                </button>
-              </div>
-              <form onSubmit={handleSendMessage} className="relative flex items-center gap-2">
-                <input
-                  type="text"
-                  value={inputText}
-                  onChange={(e) => setInputText(e.target.value)}
-                  placeholder="Tell me how you're feeling..."
-                  className="flex-1 bg-slate-50 border-none rounded-2xl px-5 py-4 text-sm focus:ring-2 focus:ring-orange-200 focus:outline-none placeholder:text-slate-400"
-                />
-                <button
-                  type="submit"
-                  disabled={isLoading || !inputText.trim()}
-                  className="bg-orange-500 text-white p-4 rounded-2xl hover:bg-orange-600 disabled:opacity-50 disabled:bg-slate-300 transition-all shadow-md active:scale-95"
-                >
-                  <Send size={20} />
-                </button>
-              </form>
+      <main style={{ flex: 1, overflowY: 'auto', padding: '20px' }}>
+        {messages.map((msg, i) => (
+          <div key={i} style={{ display: 'flex', justifyContent: msg.role === 'user' ? 'flex-end' : 'flex-start', marginBottom: '20px' }}>
+            <div style={{ maxWidth: '80%', padding: '15px', borderRadius: '20px', backgroundColor: msg.role === 'user' ? '#FF7043' : 'white', color: msg.role === 'user' ? 'white' : '#3E2723', boxShadow: '0 2px 10px rgba(0,0,0,0.05)' }}>
+              {msg.content}
             </div>
           </div>
-        )}
+        ))}
+        {isLoading && <div style={{ color: '#A1887F', fontStyle: 'italic' }}>Grace is thinking...</div>}
+        <div ref={messagesEndRef} />
       </main>
 
-      <footer className="py-6 text-slate-400 text-[10px] uppercase tracking-[0.2em] font-medium">
-        Made with love and grace
-      </footer>
-
-      <style dangerouslySetInnerHTML={{ __html: `
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
-        body { font-family: 'Inter', sans-serif; }
-        .scrollbar-hide::-webkit-scrollbar { display: none; }
-        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
-      `}} />
+      <form onSubmit={handleSendMessage} style={{ padding: '20px', backgroundColor: 'white', borderTop: '1px solid #EDE7F6', display: 'flex', gap: '10px' }}>
+        <input 
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          placeholder="Type what's on your heart..."
+          style={{ flex: 1, padding: '12px 20px', borderRadius: '25px', border: '1px solid #E0E0E0', outline: 'none' }}
+        />
+        <button type="submit" style={{ backgroundColor: '#FF7043', color: 'white', border: 'none', width: '45px', height: '45px', borderRadius: '50%', cursor: 'pointer' }}>
+          <Send size={20} />
+        </button>
+      </form>
     </div>
   );
 };
 
-const root = createRoot(document.getElementById('root')!);
-root.render(<App />);
+export default App;
