@@ -10,7 +10,7 @@ const App = () => {
   const messagesEndRef = useRef(null);
 
   // Configuration
-  const MODEL_NAME = 'gemini-1.5-flash'; 
+  const MODEL_NAME = 'gemini-2.0-flash'; 
   const SYSTEM_PROMPT = "You are Grace, a friendly Christian Counselor. Your tone is casual, warm, and deeply encouraging. Keep responses to 3-5 sentences. Always end with a gentle question.";
 
   useEffect(() => {
