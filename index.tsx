@@ -44,11 +44,12 @@ const App: React.FC = () => {
     scrollToBottom();
   }, [messages, isLoading]);
 
-  const initChat = async () => {
+const initChat = async () => {
+    // 1. Load the key safely
     const apiKey = import.meta.env.VITE_API_KEY || process.env.NEXT_PUBLIC_API_KEY || process.env.API_KEY || "";
     const ai = new GoogleGenAI({ apiKey });
 
-    // --- DETECTIVE WORK: This prints available models to your browser console ---
+    // --- DETECTIVE WORK: See which models are available ---
     try {
       const modelList = await ai.models.list();
       console.log("✅ YOUR KEY CAN USE THESE MODELS:", modelList.map(m => m.name));
@@ -56,7 +57,7 @@ const App: React.FC = () => {
       console.log("🔍 Model list check skipped.");
     }
 
-    // We will try 'gemini-1.5-flash-latest' because '1.5-flash' gave a 404 earlier
+    // 2. Create the chat session
     const chat = ai.chats.create({
       model: 'gemini-1.5-flash-latest', 
       config: {
@@ -69,11 +70,21 @@ const App: React.FC = () => {
           2. USER EXPRESSION: Always end your response with a gentle, open-ended question or an invitation for the user to share more of their feelings.
 
           CORE RESPONSIBILITIES (within the 3-5 sentence limit):
-          1. PSYCHOLOGICAL INSIGHT: Briefly explain the 'why' behind a feeling (e.g., "Anxiety often comes from our brain trying to protect us from uncertainty").
+          1. PSYCHOLOGICAL INSIGHT: Briefly explain the 'why' behind a feeling.
           2. BIBLICAL WISDOM: Weave in a relevant verse or spiritual truth simply.
           3. PRAYER: Offer a very short (1-sentence) prayer or blessing when appropriate.
           4. SOLUTIONS: Suggest one small, actionable step.
+        `,
+      },
+    });
 
+    // --- THE TRANSLATION PATCH ---
+    // This fixes the "sendMessage is not a function" error
+    chat.sendMessage = chat.send_message;
+
+    setChatSession(chat);
+    return chat;
+  };
           CONVERSATION FLOW:
           - Start: Warm greeting + tiny opening prayer (max 5 sentences total).
           - End: Brief summary + closing blessing (max 5 sentences total).
